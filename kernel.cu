@@ -32,7 +32,7 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 			int col = d_points[index].getC();
 
 			// If point above is in bounds and not a wall
-			if (row - 1 >= 0 && image[(row - 1) * 4 * N + col * 4] < 50) {
+			if (row - 1 >= 0 && image[(row - 1) * 4 * N + col * 4] < 20) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point((row - 1), col))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point((row - 1), col);
@@ -44,7 +44,7 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 
 			
 			// If point to the left is in bounds and not a wall
-			if (col - 1 >= 0 && image[row * 4 * N + (col - 1) * 4] < 50) {
+			if (col - 1 >= 0 && image[row * 4 * N + (col - 1) * 4] < 20) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point(row, (col - 1)))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point(row, (col - 1));
@@ -55,7 +55,7 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 			}
 
 			// If point below is in bounds and not a wall
-			if (row + 1 < M  && image[(row + 1) * 4 * N + col * 4] < 50) {
+			if (row + 1 < M  && image[(row + 1) * 4 * N + col * 4] < 20) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point((row + 1), col))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point((row + 1), col);
@@ -66,7 +66,7 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 			}
 
 			// If point to the left is in bounds and not a wall
-			if (col + 1 < N && image[row * 4 * N + (col + 1) * 4] < 50) {
+			if (col + 1 < N && image[row * 4 * N + (col + 1) * 4] < 20) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point(row, (col + 1)))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point(row, (col + 1));
