@@ -171,7 +171,7 @@ int main(int argc, char* argv[])
 			cudaMemcpy(d_points, &points, diagonalSize * sizeof(Point), cudaMemcpyHostToDevice);
 			cudaMemcpy(d_new_points, &temp_points, diagonalSize * sizeof(Point), cudaMemcpyHostToDevice);
 
-			//ftime(&cuda_start);
+			ftime(&cuda_start);
 
 			cudaMemset(d_data, 0, 1 * sizeof(int));
 
@@ -180,9 +180,9 @@ int main(int argc, char* argv[])
 
 			cudaDeviceSynchronize();
 
-			//ftime(&cuda_end);
+			ftime(&cuda_end);
 
-			//cuda_total += 1000 * (cuda_end.time - cuda_start.time) + (cuda_end.millitm - cuda_start.millitm);
+			cuda_total += 1000 * (cuda_end.time - cuda_start.time) + (cuda_end.millitm - cuda_start.millitm);
 
 			// Copy the resulting new points to visit for next iteration into the points to be visited array
 			cudaMemcpy(&points, d_new_points, diagonalSize * sizeof(Point), cudaMemcpyDeviceToHost);
