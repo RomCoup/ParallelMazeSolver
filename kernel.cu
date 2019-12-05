@@ -21,9 +21,9 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 
 	for (int index = (blockIdx.x * nb_threads + threadIdx.x); index < N; index += nb_threads) {
 
-		new_points[index] = Point(-1, -1);
-
-		__syncthreads();
+		if (new_points[index].getC() == 0 && new_points[index].getR() == 0) {
+			new_points[index] = Point(-1, -1);
+		}
 
 		// If Point is empty (ie, still at initial Point(-1,-1) value), skip process but still copy back results
 		if (d_points[index].getR() >= 0) {
@@ -32,7 +32,7 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 			int col = d_points[index].getC();
 
 			// If point above is in bounds and not a wall
-			if (row - 1 >= 0 && image[(row - 1) * 4 * N + col * 4] < 20) {
+			if (row - 1 >= 0 && image[(row - 1) * 4 * N + col * 4 + 2] > 250) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point((row - 1), col))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point((row - 1), col);
@@ -44,7 +44,7 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 
 			
 			// If point to the left is in bounds and not a wall
-			if (col - 1 >= 0 && image[row * 4 * N + (col - 1) * 4] < 20) {
+			if (col - 1 >= 0 && image[row * 4 * N + (col - 1) * 4 + 2] > 250) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point(row, (col - 1)))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point(row, (col - 1));
@@ -55,7 +55,7 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 			}
 
 			// If point below is in bounds and not a wall
-			if (row + 1 < M  && image[(row + 1) * 4 * N + col * 4] < 20) {
+			if (row + 1 < M  && image[(row + 1) * 4 * N + col * 4 + 2] > 250) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point((row + 1), col))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point((row + 1), col);
@@ -65,8 +65,8 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 				}
 			}
 
-			// If point to the left is in bounds and not a wall
-			if (col + 1 < N && image[row * 4 * N + (col + 1) * 4] < 20) {
+			// If point to the right is in bounds and not a wall
+			if (col + 1 < N && image[row * 4 * N + (col + 1) * 4 + 2] > 250) {
 				// Insert in shared array and get insertion index
 				if (insertPoint(new_points, Point(row, (col + 1)))) {
 					new_points[atomicAdd(&insert_index[0], 1)] = Point(row, (col + 1));
@@ -80,7 +80,6 @@ __global__ void checkPoint(Point* d_points, Point* d_new_points, unsigned char* 
 		// Synchronize threads and copy shared array into result array
 		__syncthreads();
 		d_new_points[index] = new_points[index];
-		d_new_points[index + (N < M ? N : M)] = new_points[index + (N < M ? N : M)];
 	}
 }
 
@@ -94,13 +93,13 @@ __device__ bool insertPoint(Point array[2 * (N < M ? N : M)], Point point) {
 			return false;
 		}
 	}
-	if (i < 2 * (N < M ? N : M)) return true;
-	return false;
+	return true;
 }
 
 int main(int argc, char* argv[])
 {
 	struct timeb start_time, end_time, cuda_start, cuda_end;
+	double cuda_total = 0, total_time = 0;
 	ftime(&start_time);
 	const int diagonalSize = 2 * (N < M ? N : M);
 
@@ -110,7 +109,6 @@ int main(int argc, char* argv[])
 	}
 
 	char* input_filename = argv[1];
-	double cuda_total = 0, total_time = 0;
 	unsigned total_threads = diagonalSize;
 	if (argc == 3) total_threads = atoi(argv[2]);
 	unsigned nb_threads = total_threads;
@@ -124,7 +122,8 @@ int main(int argc, char* argv[])
 	}
 
 	unsigned error;
-	unsigned char* image, * image_copy;
+	unsigned char* image = (unsigned char*)malloc(N * M * sizeof(unsigned char) * 4);
+	unsigned char* image_copy;
 	unsigned image_width, image_height;
 
 	// Decode image
@@ -136,7 +135,6 @@ int main(int argc, char* argv[])
 
 	// Check that maze is non-empty
 	if (image_width * image_height != 0) {
-
 		// Array of points to be visited at each iteration, initialized with all Point(-1,-1) entries
 		Point points[diagonalSize];
 		// Set first point to be visited - the arrival point (because we are backtracking), the last point of the maze (assuming square maze)
@@ -144,9 +142,6 @@ int main(int argc, char* argv[])
 
 		cudaMallocManaged((void**)& image_copy, image_width * image_height * 4 * sizeof(unsigned char));
 		cudaMemcpy(image_copy, image, image_width * image_height * 4 * sizeof(unsigned char), cudaMemcpyHostToDevice);
-
-		// Temporary points matrix, initialized with  all Point(-1,-1) entries
-		Point temp_points[N];
 
 		// Cuda copies of the points to be visited and resulting new points to visit for next iteration
 		Point* d_points, * d_new_points;
@@ -169,11 +164,9 @@ int main(int argc, char* argv[])
 			}
 
 			cudaMemcpy(d_points, &points, diagonalSize * sizeof(Point), cudaMemcpyHostToDevice);
-			cudaMemcpy(d_new_points, &temp_points, diagonalSize * sizeof(Point), cudaMemcpyHostToDevice);
+			cudaMemset(d_data, 0, 1 * sizeof(int));
 
 			ftime(&cuda_start);
-
-			cudaMemset(d_data, 0, 1 * sizeof(int));
 
 			// Call to device function with N threads (at most N points), points to be visited, and array to hold resulting new points to visit for next iteration
 			checkPoint << <nb_blocks, nb_threads >> > (d_points, d_new_points, image_copy, nb_threads, d_data, run_num); //d_maze
